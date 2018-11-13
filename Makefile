@@ -56,6 +56,7 @@ C_FILES			+= Minimal/TimerDemo.c
 
 # Main Object
 C_FILES			+= main.c
+C_FILES			+= philosophers.c
 
 # Include Paths
 INCLUDES        += -I$(SRCROOT)/Source/include
@@ -71,7 +72,7 @@ OBJS = $(patsubst %.c,%.o,$(C_FILES))
 # Warnings
 CWARNS += -W
 CWARNS += -Wall
-CWARNS += -Werror
+#CWARNS += -Werror
 CWARNS += -Wextra
 CWARNS += -Wformat
 CWARNS += -Wmissing-braces
@@ -82,17 +83,18 @@ CWARNS += -Wno-sign-compare
 CWARNS += -Wswitch
 CWARNS += -Wuninitialized
 CWARNS += -Wunknown-pragmas
-CWARNS += -Wunused-function
-CWARNS += -Wunused-label
-CWARNS += -Wunused-parameter
-CWARNS += -Wunused-value
-CWARNS += -Wunused-variable
+#CWARNS += -Wunused-function
+#CWARNS += -Wunused-label
+#CWARNS += -Wunused-parameter
+#CWARNS += -Wunused-value
+#CWARNS += -Wunused-variable
 CWARNS += -Wmissing-prototypes
 
 #CWARNS += -Wno-unused-function
 
 CFLAGS += -m32
 CFLAGS += -DDEBUG=1
+CFLAGS += -fno-aggressive-loop-optimizations
 #CFLAGS += -g -DUSE_STDIO=1 -D__GCC_POSIX__=1
 CFLAGS += -g -UUSE_STDIO -D__GCC_POSIX__=1
 ifneq ($(shell uname), Darwin)
