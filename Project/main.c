@@ -74,6 +74,7 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 
 #define mainTASK_NUMBER                 ( 5 )
 #define mainTASK_PRIORITY               ( tskIDLE_PRIORITY + 1 )
@@ -81,6 +82,7 @@
 static void simpleTask( void *pvParameters );
 
 static volatile uint uIndex;
+static SemaphoreHandle_t xSemaphore;
 
 
 int main ( void )
@@ -90,6 +92,10 @@ int main ( void )
         xTaskCreate(simpleTask, "simpleTask", configMINIMAL_STACK_SIZE,
                     (void*) i, mainTASK_PRIORITY, NULL);
     }
+
+    xSemaphore = xSemaphoreCreateBinary();
+    configASSERT(xSemaphore); // is it enough memory to create semaphore
+    xSemaphoreGive(xSemaphore); // init semaphore with a value of 1
 
     vTaskStartScheduler();
 
@@ -102,7 +108,9 @@ static void simpleTask( void *pvParameters )
 
     uint i = 0;
     for( ;i < 10000000UL; ++i ) {
+        xSemaphoreTake(xSemaphore, portMAX_DELAY);
         uIndex++;
+        xSemaphoreGive(xSemaphore);
     }
     printf("%u %u\n", uTaskId, uIndex);
     // acording to documentation task should not return, suspend task til exit
