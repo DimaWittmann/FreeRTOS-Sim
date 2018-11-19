@@ -102,7 +102,7 @@ static void simpleTask( void *pvParameters )
 
     uint i = 0;
     for( ;i < 10000000UL; ++i ) {
-        uIndex++;
+        __sync_fetch_and_add(&uIndex, 1);
     }
     printf("%u %u\n", uTaskId, uIndex);
     // acording to documentation task should not return, suspend task til exit
