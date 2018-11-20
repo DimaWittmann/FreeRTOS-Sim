@@ -57,6 +57,7 @@ C_FILES			+= Minimal/TimerDemo.c
 # Main Object
 C_FILES			+= main.c
 C_FILES			+= philosophers.c
+C_FILES			+= notification_FSM.c
 
 # Include Paths
 INCLUDES        += -I$(SRCROOT)/Source/include

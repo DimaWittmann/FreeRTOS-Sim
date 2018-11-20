@@ -86,180 +86,114 @@
  *
  */
 
-
 /* Standard includes. */
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
-#include <signal.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
 
 #include "philosophers.h"
 
-/* Priorities at which the tasks are created. */
-#define mainCHECK_TASK_PRIORITY         ( configMAX_PRIORITIES - 10 )
-#define mainQUEUE_POLL_PRIORITY         ( tskIDLE_PRIORITY + 1 )
-#define mainSEM_TEST_PRIORITY           ( tskIDLE_PRIORITY + 1 )
-#define mainBLOCK_Q_PRIORITY            ( tskIDLE_PRIORITY + 2 )
-#define mainCREATOR_TASK_PRIORITY       ( tskIDLE_PRIORITY + 3 )
-#define mainINTEGER_TASK_PRIORITY       ( tskIDLE_PRIORITY )
-#define mainGEN_QUEUE_TASK_PRIORITY     ( tskIDLE_PRIORITY )
-#define mainFLOP_TASK_PRIORITY          ( tskIDLE_PRIORITY )
-#define mainQUEUE_OVERWRITE_PRIORITY    ( tskIDLE_PRIORITY )
+#define mainTIMER_DELAY (100UL)
 
-#define mainTIMER_TEST_PERIOD           ( 50 )
-#define mainTIMER_DELAY                 ( 2500UL )
-/*
- * Prototypes for the standard FreeRTOS callback/hook functions implemented
- * within this file.
- */
-void vApplicationMallocFailedHook( void );
-void vApplicationIdleHook( void );
-void vApplicationTickHook( void );
+static void simpleTask(void *pvParameters);
+static void clearScreen(void *pvParameters);
 
-/* Task function to check demo status. */
-static void simpleTask( void *pvParameters );
-static void clearScreen( void *pvParameters );
-
-
-static bool bExiting = false;
-
-
-static void vExitSignal(int iSig);
-
+static struct Philosopher philosophers[philoPHILOSOPHERS_NUMBER];
+static struct FSMState states[STATE_MAX];
+static struct Chopstick chopsticks[philoPHILOSOPHERS_NUMBER] = {{0, 1},
+								{1, 1},
+								{2, 1},
+								{3, 1},
+								{4, 1}};
 
 /*-----------------------------------------------------------*/
 
-int main ( void )
+int main(void)
 {
-    TaskHandle_t xTask [philoPHILOSOPHERS_NUMBER + 1];
-    uint i = 0;
-    struct Philosopher philosophers [philoPHILOSOPHERS_NUMBER] = {0};
-    struct Chopstick chopsticks [philoPHILOSOPHERS_NUMBER] = {
-        {0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}};
+	TaskHandle_t clearTaskHandle;
 
-    for (i = 0; i < philoPHILOSOPHERS_NUMBER; ++i) {
-        philosophers[i].id = i;
-        philosophers[i].state = THINKING;
-        philosophers[i].chopsticks = chopsticks;
-        xTaskCreate(simpleTask, "simpleTask", configMINIMAL_STACK_SIZE,
-                    &philosophers[i], mainCHECK_TASK_PRIORITY + i, &xTask[i] );
-    }
+	xTaskCreate(clearScreen, "clearScreen", configMINIMAL_STACK_SIZE,
+		    philosophers, philoCHECK_TASK_PRIORITY + 5,
+		    &clearTaskHandle);
 
-    xTaskCreate(clearScreen, "clearScreen", configMINIMAL_STACK_SIZE,
-                NULL, mainCHECK_TASK_PRIORITY + 8, &xTask[philoPHILOSOPHERS_NUMBER]);
+	initPhilosophers();
 
-    signal(SIGINT, vExitSignal);
+	vTaskStartScheduler();
 
-    /* Start the scheduler itself. */
-    vTaskStartScheduler();
+	deinitPhilosophers();
+	vTaskDelete(clearTaskHandle);
 
-    for (i = 0; i < philoPHILOSOPHERS_NUMBER + 1; ++i) {
-        vTaskDelete(xTask);
-    }
-
-    return 0;
+	return 0;
 }
 
+static void clearScreen(void *pvParameters)
+{
+	const TickType_t xCycleFrequency = pdMS_TO_TICKS(mainTIMER_DELAY);
+	TickType_t xNextWakeTime = xTaskGetTickCount();
+	struct Philosopher *xPhilosophers = (struct Philosopher *)pvParameters;
+
+	for (;;) {
+		uint i;
+		vTaskDelayUntil(&xNextWakeTime, xCycleFrequency);
+		// system("clear");
+		printf("\n");
+		uint cycles = 0;
+
+		for (i = 0; i < philoPHILOSOPHERS_NUMBER; ++i) {
+			cycles += xPhilosophers[i].cycles;
+			printf("philosopher %u ate %u in %u \n",
+			       xPhilosophers[i].id, xPhilosophers[i].ate,
+			       xPhilosophers[i].cycles);
+		}
+	}
+}
+
+static void simpleTask(void *pvParameters)
+{
+	struct Philosopher *xPhilosopher = (struct Philosopher *)pvParameters;
+	for (;;) {
+		FSMNextStep(xPhilosopher, states);
+	}
+	vTaskSuspend(NULL);
+}
+
+void initPhilosophers(void)
+{
+	uint i = 0;
+
+	for (i = 0; i < philoPHILOSOPHERS_NUMBER; ++i) {
+		philosophers[i].id = i;
+		philosophers[i].state = THINKING;
+		philosophers[i].chopsticks = chopsticks;
+		xTaskCreate(simpleTask, "simpleTask", configMINIMAL_STACK_SIZE,
+			    &philosophers[i], philoCHECK_TASK_PRIORITY,
+			    &(philosophers[i].taskHandle));
+	}
+
+	FSMInit(states, philosophers);
+}
+
+void deinitPhilosophers(void)
+{
+	uint i = 0;
+
+	for (i = 0; i < philoPHILOSOPHERS_NUMBER; ++i) {
+		vTaskDelete(philosophers[i].taskHandle);
+	}
+}
 
 /*-----------------------------------------------------------*/
-static void vExitSignal(int iSig)
+
+void vAssertCalled(unsigned long ulLine, const char *const pcFileName)
 {
-    if (iSig == SIGINT)
-        bExiting = true;
-}
-/*-----------------------------------------------------------*/
-
-static void clearScreen( void *pvParameters )
-{
-    const TickType_t xCycleFrequency = pdMS_TO_TICKS( mainTIMER_DELAY ); 
-    TickType_t xNextWakeTime = xTaskGetTickCount();
-
-    for (;;) {
-        vTaskDelayUntil( &xNextWakeTime, xCycleFrequency);
-        system("clear");
-    }
-}
-
-static void simpleTask( void *pvParameters )
-{
-    TickType_t xNextWakeTime;
-    const TickType_t xCycleFrequency = pdMS_TO_TICKS( mainTIMER_DELAY );
-    struct Philosopher *philosopher = (struct Philosopher*) pvParameters;
-
-    /* Initialise xNextWakeTime - this only needs to be done once. */
-    xNextWakeTime = xTaskGetTickCount();
-
-
-    for( ;; )
-    {
-        /* Place this task in the blocked state until it is time to run again. */
-        vTaskDelayUntil( &xNextWakeTime, xCycleFrequency );
-
-        /* This is the only task that uses stdout so its ok to call printf()
-        directly. */
-        printf( ( char * ) "philosopher %u %s - %u\n", philosopher->id, stateToChar(philosopher->state),
-            ( unsigned int ) xTaskGetTickCount() );
-        fflush( stdout );
-
-        if (bExiting)
-            vTaskEndScheduler();
-
-        switch (philosopher->state) {
-            case THINKING:
-                philosopher->state = HUNGRY;
-                break;
-
-            case HUNGRY:
-                if (checkLeftChopstick(philosopher) && checkRightChopstick(philosopher)) {
-                    getRightChopstick(philosopher);
-                    getLeftChopstick(philosopher);
-                }
-                if (philosopher->hasLeftChopstick && philosopher->hasRightChopstick) {
-                    philosopher->state = EATING;
-                }
-                break;
-
-            case EATING:
-                configASSERT(philosopher->hasLeftChopstick && philosopher->hasRightChopstick);
-
-                putLeftChopstick(philosopher);
-                putRightChopstick(philosopher);
-
-                configASSERT(!(philosopher->hasLeftChopstick && philosopher->hasRightChopstick));
-
-                philosopher->state = THINKING;
-                break;
-
-            default:
-                configASSERT(0);
-                break;
-        }
-    }
-}
-
-void vApplicationTickHook( void )
-{
-    /* This function will be called by each tick interrupt if
-    configUSE_TICK_HOOK is set to 1 in FreeRTOSConfig.h.  User code can be
-    added here, but the tick hook is called from an interrupt context, so
-    code must not attempt to block, and only the interrupt safe FreeRTOS API
-    functions can be used (those that end in FromISR()). */
-
-
-}
-/*-----------------------------------------------------------*/
-
-void vAssertCalled( unsigned long ulLine, const char * const pcFileName )
-{
-    taskENTER_CRITICAL();
-    {
-        printf("[ASSERT] %s:%lu\n", pcFileName, ulLine);
-        fflush(stdout);
-    }
-    taskEXIT_CRITICAL();
-    exit(-1);
+	taskENTER_CRITICAL();
+	{
+		printf("[ASSERT] %s:%lu\n", pcFileName, ulLine);
+		fflush(stdout);
+	}
+	taskEXIT_CRITICAL();
+	exit(-1);
 }
 /*-----------------------------------------------------------*/
